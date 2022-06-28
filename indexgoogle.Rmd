@@ -1,0 +1,519 @@
+---
+title: "Research Trends Code using google scholar"
+output:
+    html_document:
+    keep_md: true
+---
+
+This is the code and bibtex files for the paper Research trends in Coquerel's sifaka (Propithecus coquereli)
+
+```{r include=FALSE}
+using<-function(...) {
+    libs<-unlist(list(...))
+    req<-unlist(lapply(libs,require,character.only=TRUE))
+    need<-libs[req==FALSE]
+    n<-length(need)
+    if(n>0){
+        libsmsg<-if(n>2) paste(paste(need[1:(n-1)],collapse=", "),",",sep="") else need[1]
+        print(libsmsg)
+        if(n>1){
+            libsmsg<-paste(libsmsg," and ", need[n],sep="")
+        }
+        libsmsg<-paste("The following packages could not be found: ",libsmsg,"\n\r\n\rInstall missing packages?",collapse="")
+        if(winDialog(type = c("yesno"), libsmsg)=="YES"){       
+            install.packages(need)
+            lapply(need,require,character.only=TRUE)
+        }
+    }
+}
+using("tidyverse","bib2df", "bibliometrix", "tidytext")
+```
+
+```{r include=FALSE}
+#read in data
+M <- read.csv("C:/Users/funke/Downloads/PoPCites.csv", 
+    encoding = "UTF-8")
+
+
+##Analysis
+biblioAnalysis1<-function (M, sep = ",") 
+{
+  Authors = NULL
+  Authors_frac = NULL
+  FirstAuthor = NULL
+  Year = NULL
+  FAffiliation = NULL
+  Affiliation = NULL
+  Affiliation_frac = NULL
+  CO = rep(NA, dim(M)[1])
+  ECC = NULL
+  ECCperYear = NULL
+  SO = NULL
+  Country = NULL
+  DE = NULL
+  ID = NULL
+  MostCitedPapers = NULL
+  Tags <- names(M)
+  if ("Authors" %in% Tags) {
+    listAU = strsplit(as.character(M$Authors), sep)
+    listAU = lapply(listAU, function(l) trim(l))
+    nAU <- lengths(listAU)
+    fracAU <- rep(1/nAU, nAU)
+    AU = unlist(listAU)
+    Authors = sort(table(AU), decreasing = TRUE)
+    Authors_frac = aggregate(fracAU, by = list(AU), "sum")
+    names(Authors_frac) = c("Author", "Frequency")
+    Authors_frac = Authors_frac[order(-Authors_frac$Frequency), 
+      ]
+    FirstAuthor = unlist(lapply(listAU, function(l) {
+      if (length(l) > 0) {
+        l = l[[1]]
+      }
+      else {
+        l = NA
+      }
+      return(l)
+    }))
+    AuSingleAuthoredArt = length(unique(FirstAuthor[nAU == 
+      1]))
+    AuMultiAuthoredArt = length(Authors) - AuSingleAuthoredArt
+ 
+    ECC = as.numeric(M$ECC)
+    Year = as.numeric(M$Year)
+    CurrentYear = as.numeric(format(Sys.Date(), "%Y"))
+    ECCperYear = ECC/(CurrentYear - Year + 1)
+    if (!("DOI" %in% names(M))) 
+      M$DOI <- ""
+    MostCitedPapers <- data.frame(M$DOI, FirstAuthor, M$Year, M$Title, ECC, ECCperYear, 
+      Year) %>% group_by(.data$Year) %>% mutate(NECC = .data$ECC/mean(.data$ECC)) %>% 
+      ungroup() %>% select(-.data$Year) %>% arrange(desc(.data$ECC)) %>% 
+      as.data.frame()
+    names(MostCitedPapers) = c("DOI", "FirstAuthor", "Year", "Paper",  
+      "TC", "TCperYear", "NTC")
+  }
+  if ("Source" %in% Tags) {
+    SO = gsub(",", "", M$Source, fixed = TRUE)
+    SO = sort(table(SO), decreasing = TRUE)
+  }
+  results = list(Articles = dim(M)[1], Authors = Authors, 
+    AuthorsFrac = Authors_frac, FirstAuthor = FirstAuthor, 
+    nAUperPaper = nAU, Appearances = sum(nAU), nAuthors = dim(Authors), 
+    AuMultiAuthoredArt = AuMultiAuthoredArt, AuSingleAuthoredArt = AuSingleAuthoredArt, 
+    MostCitedPapers = MostCitedPapers, Years = Year,
+    TotalCitation = ECC, ECCperYear = ECCperYear, Sources = SO)
+  class(results) <- "bibliometrix"
+  return(results)
+}
+
+results <- biblioAnalysis1(M, sep = ",")
+```
+
+```{r include=FALSE}
+#Descriptive analysis
+
+  k = 10
+  ECCm <- format(mean(as.numeric(results$TotalCitation), na.rm = TRUE), 
+    digits = 4)
+  ECCmy <- format(mean(as.numeric(results$MostCitedPapers$ECCperYear), 
+    na.rm = TRUE), digits = 4)
+  CollIndex <- format(results$AuMultiAuthoredArt/sum(results$nAUperPaper > 
+    1), digits = 3)
+  
+   Y = data.frame(table(results$Years))
+  names(Y) = c("Year   ", "Articles")
+    ny = max(as.numeric(levels(Y[, 1])), na.rm = TRUE) - min(as.numeric(levels(Y[, 
+    1])), na.rm = TRUE)
+  GR = ((Y[nrow(Y), 2]/Y[1, 2])^(1/(ny)) - 1) * 100
+ 
+  MYfP <- as.numeric(substr(Sys.time(), 1, 4)) - mean(results$Years, 
+    na.rm = TRUE)
+  MainInfo = toupper("\n\nMain Information about data\n\n")
+  MainInfo[length(MainInfo) + 1] = paste("Timespan                             ", 
+    min(results$Years, na.rm = T), ":", max(results$Years, 
+      na.rm = T), "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Sources (Journals, Books, etc)       ", 
+    length(results$Sources), "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Documents                            ", 
+    results$Articles, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Average years from publication       ", 
+    format(MYfP, digits = 3), "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Average citations per documents      ", 
+    format(ECCm, digits = 3), "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Average citations per year per doc   ", 
+    format(ECCmy, digits = 3), "\n")
+ MainInfo[length(MainInfo) + 1] = toupper("\nAuthors\n")
+  MainInfo[length(MainInfo) + 1] = paste("Authors                              ", 
+    results$nAuthors, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Author Appearances                   ", 
+    results$Appearances, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Authors of single-authored documents ", 
+    results$AuSingleAuthoredArt, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Authors of multi-authored documents  ", 
+    results$AuMultiAuthoredArt, "\n")
+  MainInfo[length(MainInfo) + 1] = toupper("\nAuthors Collaboration\n")
+  MainInfo[length(MainInfo) + 1] = paste("Single-authored documents            ", 
+    as.character(round(sum(results$nAUperPaper == 1), 0)), 
+    "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Documents per Author                 ", 
+    format(results$Articles/results$nAuthors, digits = 3), 
+    "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Authors per Document                 ", 
+    format(results$nAuthors/results$Articles, digits = 3), 
+    "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Co-Authors per Documents             ", 
+    format(mean(results$nAUperPaper), digits = 3), "\n")
+  MainInfo[length(MainInfo) + 1] = paste("Collaboration Index                  ", 
+    CollIndex, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("\nAnnual Percentage Growth Rate:", GR, "\n")
+  MainInfo[length(MainInfo) + 1] = paste("\n")
+
+##Summary
+cat(MainInfo)
+```
+
+
+## Most Productive Authors
+
+```{r include=FALSE}
+
+  A = data.frame(cbind(results$Authors[1:k]))
+  A$MPA = row.names(A)
+  A = A[, c(2, 1)]
+  A[, 3:4] = results$AuthorsFrac[1:k, ]
+  names(A) = c("Authors       ", "Articles", "Authors       ", 
+    "Articles Fractionalized")
+  A = format(A, justify = "left", digits = 3)
+  row.names(A) = 1:k
+  print(A, row.names = TRUE)
+```
+
+
+
+## Top 10 Journals referenced
+
+```{r include=FALSE}
+
+TopJournals <-M %>% 
+  mutate_all(na_if,"")%>%
+  filter(!is.na(Source)) %>%
+  group_by(Source) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n)) %>%
+  slice(1:10) 
+
+ggplot(TopJournals, aes(x = n, y = Source, label = n)) +
+    geom_segment(aes(x = 0, y = Source, xend = n, yend = Source), color = "grey50") +
+    geom_point( aes(color=-n, size=n), show.legend = FALSE) +
+    scale_radius(range=c(10, 25))+
+    geom_text(color = "white", size = 4) +
+    scale_y_discrete(limits = rev(TopJournals$Source)) +
+    scale_fill_continuous(type = "gradient")+
+    labs(y = "Sources", x = "Citations")+   
+    expand_limits(y= c(1, 11))+
+    theme_minimal()+
+    theme(text=element_text(size=20), axis.text.y  = element_text(angle=0, hjust=0)) 
+
+```
+
+
+## Top-Authors’ Productivity over the Time
+
+```{r include=FALSE}
+#authorProdOverTime
+  M <- M[!is.na(M$Year), ] #drop the ones w/o years
+  AU <- names(tableTag(M, "Authors", sep = ","))[1:10]
+
+    df <- data.frame(Author = "NA", Year = NA, TI = "NA", SO = "NA", 
+    DOI = "NA", TC = NA, TCpY = NA, stringsAsFactors = FALSE)
+  Y <- as.numeric(substr(Sys.time(), 1, 4))
+  if (!("DOI" %in% names(M))) {
+    M$DOI = "NA"
+  }
+  for (i in 1:length(AU)) {
+    ind <- which(regexpr(AU[i], M$Authors) > -1)
+    TCpY <- M$ECC[ind]/(Y - M$Year[ind] + 1)
+    dfAU <- data.frame(Author = rep(AU[i], length(ind)), 
+      Year = M$Year[ind], TI = M$Title[ind], SO = M$Source[ind], 
+      DOI = M$DOI[ind], TC = M$ECC[ind], TCpY = TCpY, stringsAsFactors = TRUE)
+    df <- rbind(df, dfAU)
+  }
+  df <- df[-1, ]
+  df2 <- dplyr::group_by(df, .data$Author, .data$Year) %>% 
+    dplyr::summarise(freq = length(.data$Year), TC = sum(.data$TC), 
+      TCpY = sum(.data$TCpY))
+  df2 <- as.data.frame(df2)
+  df2$Author <- factor(df2$Author, levels = AU[1:k])
+  x <- c(0.5, 1.5 * k/10)
+  y <- c(min(df$Year), min(df$Year) + diff(range(df2$Year)) * 
+    0.125)
+  g <- ggplot(df2, aes(x = .data$Author, y = .data$Year, text = paste("Author: ", 
+    .data$Author, "\nYear: ", .data$Year, "\nN. of Articles: ", 
+    .data$freq, "\nTotal Citations per Year: ", round(.data$TCpY, 
+      2)))) + geom_point(aes(alpha = .data$TCpY, size = .data$freq), 
+    color = "dodgerblue4") + scale_size(range = c(2, 6)) + 
+    scale_alpha(range = c(0.3, 1)) + scale_y_continuous(breaks = seq(min(df2$Year), 
+    max(df2$Year), by = 2)) + guides(size = guide_legend(order = 1, 
+    "N.Articles"), alpha = guide_legend(order = 2, "TC per Year")) + 
+    theme(legend.position = "right", text = element_text(color = "#444444"), 
+      panel.background = element_rect(fill = "gray97"), 
+      panel.grid.minor = element_line(color = "#FFFFFF"), 
+      panel.grid.major = element_line(color = "#FFFFFF"), 
+      plot.title = element_text(size = 24), axis.title = element_text(size = 14, 
+        color = "#555555"), axis.title.y = element_text(vjust = 1, 
+        angle = 90, face = "bold"), axis.title.x = element_text(hjust = 0.95, 
+        face = "bold"), axis.text.x = element_text(face = "bold", 
+        angle = 90), axis.text.y = element_text(face = "bold")) + 
+    labs(title = "Top-Authors' Production over Time", x = "Author", 
+      y = "Year") + geom_line(data = df2, aes(x = .data$Author, 
+    y = .data$Year, group = .data$Author), size = 1, color = "firebrick", 
+    alpha = 0.3) + scale_x_discrete(limits = rev(levels(df2$Author))) + 
+    coord_flip()
+
+  g
+```
+
+## Papers per decade
+
+```{r}
+
+#Chart of Paper per decade
+M <- M[!is.na(M$Year), ] #drop the ones w/o years
+
+G <- M %>%
+  mutate(Decade = as.numeric(Year) - as.numeric(Year) %% 10) %>%
+  group_by(Decade) %>%
+  summarize(val = n()) %>%
+  ungroup()
+
+G$Decade = as.factor(G$Decade)
+
+ggplot2::ggplot(G, aes(x = Decade, y = val)) +
+  geom_bar(stat = "identity", aes(fill = factor(Decade))) +
+  scale_x_discrete(labels = G %>% distinct(Decade) %>% mutate(Decade = paste0(Decade, "s")) %>% pull()) +
+  geom_text(aes(label = format(val, big.mark = ",")), size = 5, vjust =
+              -0.3) +
+  ggtitle('Number of Papers per Decade') +
+  theme(
+    panel.border = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "none",
+    plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
+    text = element_text(),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(colour = NA),
+    axis.title = element_text(face = "bold", size = rel(1)),
+    axis.text = element_text(size = 16),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_line(colour = "#f0f0f0"),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(colour = "black"),
+    plot.margin = unit(c(10, 5, 5, 5), "mm"),
+    strip.background = element_rect(colour = "#f0f0f0", fill = "#f0f0f0"),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+## Most Cited documents 
+
+```{r}
+  
+  MostCitedPapers = results$MostCitedPapers[1:10, ]
+    print(MostCitedPapers, row.names = TRUE)
+
+  MostCitedPapers$Details <- paste(MostCitedPapers$FirstAuthor, "(", MostCitedPapers$Year, ")")
+    
+  
+ggplot(MostCitedPapers, aes(x = TC, y = Details, label = TC)) +
+    geom_segment(aes(x = 0, y = Details, xend = TC, yend = Details), color = "grey50") +
+    geom_point( aes(color=-TC, size=TC), show.legend = FALSE) +
+    scale_radius(range=c(10, 25))+
+    geom_text(color = "white", size = 4) +
+    scale_y_discrete(limits = rev(MostCitedPapers$Details)) +
+    scale_fill_continuous(type = "gradient")+
+    labs(y = "Documents", x = "Citations")+   
+    expand_limits(y= c(1, 11))+
+    theme_minimal()+
+    theme(text=element_text(size=20), axis.text.y  = element_text(angle=0, hjust=0)) 
+
+```
+
+
+
+## Co-word analysis: cluster terms extracted from titles and abstracts
+
+
+```{r}
+TI_AB <- paste(M$Title, M$Abstract, sep=" ")
+TI_AB <- tibble(TI_AB)
+TI_AB <- TI_AB %>%
+  unnest_tokens(word, TI_AB, token = "regex", pattern = "\\s+|[[:punct:]]+") %>% #remove punctuation
+  anti_join(get_stopwords()) %>%      #24,747 words #remove stopwords
+  mutate(word = SnowballC::wordStem(word)) %>% #4998 words #stemming
+  mutate_all(na_if,"")%>%
+  filter(!is.na(word)) %>% #remove blanks
+  count(word, sort = TRUE) %>% # 4997 words
+  filter( n >= 40) 
+
+M$TI_AB <- paste(M$Title, M$Abstract, sep=" ")
+M$TI_AB <- tolower(M$TI_AB) #lowercase letters
+M$TI_AB <-gsub("[[:punct:]]", "", M$TI_AB) #remove punctuation
+stopswords<-list(get_stopwords()[1]) #remove stopwords
+find.string <- paste('\\b',unlist(stopswords),'\\b', collapse = "|") #remove stopwords
+M$TI_AB <- gsub(find.string," ", M$TI_AB) #remove stopwords
+M$TI_AB <- gsub("lemurs", "lemur", M$TI_AB) #remove plural
+M$TI_AB <- gsub("sifakas", " ", M$TI_AB) #remove plural
+M$TI_AB <- gsub("\\bthe \\b", " ", M$TI_AB) #remove the
+M$TI_AB <- gsub("\\ba \\b", " ", M$TI_AB) #remove the
+
+
+CW <- cocMatrix(M, Field = "TI_AB", type = "matrix", sep = " ")
+    CW =  CW[, colSums(CW) >= 40] #74 words
+    CW = CW[rowSums(CW) > 0, ]
+    CW = CW[, !(colnames(CW) %in% "NA")]
+    NetMatrix = Matrix::crossprod(CW, CW)
+    Net = 1 - normalizeSimilarity(NetMatrix, type = "association")
+    Matrix::diag(Net) = 0
+    res.mca <- Net %>% cmdscale()
+    colnames(res.mca) <- c("Dim.1", "Dim.2")
+    df = data.frame(res.mca)
+    row.names(df) = row.names(Net)
+    km.res = hclust(dist(df), method = "average")
+    k.max = 10
+    clust = min((length(km.res$height) - which.max(diff(km.res$height)) + 1), k.max)
+  
+    
+  km.res$data = df
+  km.res$cluster = cutree(km.res, k = clust)
+  km.res$data.clust = cbind(km.res$data, km.res$cluster)
+  names(km.res$data.clust)[3] = "clust"
+  centers <- km.res$data.clust %>% group_by(.data$clust) %>% 
+    summarise(Dim.1 = mean(.data$Dim.1), Dim.2 = mean(.data$Dim.2)) %>% 
+    as.data.frame()
+  km.res$centers = centers[, c(2, 3, 1)]
+
+  factoextra::fviz_cluster(km.res,
+                           stand = FALSE,
+                           data = df,
+                           repel = TRUE) + theme_minimal() +
+    geom_point() + geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      color = adjustcolor("grey40", alpha.f = 0.7)
+    ) +
+    geom_vline(
+      xintercept = 0,
+      linetype = "dashed",
+      color = adjustcolor("grey40",
+                          alpha.f = 0.7)
+    ) + theme(
+      panel.border = element_rect(
+        fill = NA,
+        size = 0.3,
+        linetype = "dashed",
+        colour = adjustcolor("gray60",
+                             alpha.f = 0.7)
+      ),
+      panel.background = element_rect(fill = "white", colour = "white"),
+      panel.grid.major = element_line(
+        size = 0.3,
+        linetype = "dashed",
+        colour = adjustcolor("gray60", alpha.f = 0.7)
+      ),
+      panel.grid.minor = element_blank()
+    ) + theme(legend.position = "none")
+  
+  
+
+  b_dend <-  factoextra::fviz_dend(km.res, rect = TRUE, k = clust,  
+    main = "Topic Dendrogram") + 
+    theme( panel.background = element_rect(fill = "white", 
+      colour = "white"), panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank())
+      
+  plot(b_dend)
+```
+
+##  Word Growth
+
+```{r}
+
+M$TI_AB <- paste(M$Title, M$Abstract, sep=" ")
+M$TI_AB <- tolower(M$TI_AB) #lowercase letters
+M$TI_AB <-gsub("[[:punct:]]", "", M$TI_AB) #remove punctuation
+stopswords<-list(get_stopwords()[1]) #remove stopwords
+find.string <- paste('\\b',unlist(stopswords),'\\b', collapse = "|") #remove stopwords
+M$TI_AB <- gsub(find.string," ", M$TI_AB) #remove stopwords
+M$TI_AB <- gsub("lemurs", "lemur", M$TI_AB) #remove plural
+M$TI_AB <- gsub("sifakas", " ", M$TI_AB) #remove plural
+M$TI_AB <- gsub("\\bthe \\b", " ", M$TI_AB) #remove the
+M$TI_AB <- gsub("\\ba \\b", " ", M$TI_AB) #remove the
+
+
+topwords<- M %>%
+    mutate(words = strsplit(as.character(TI_AB), " ")) %>%
+    unnest(cols=c(words)) %>%
+    mutate(words = SnowballC::wordStem(words)) %>%
+    mutate_all(~(str_replace(., "madagascariensi", "madagascar")))%>% 
+    mutate_all(~(str_replace(., "evolutionari", "evolut")))%>%
+     mutate_all(~(str_replace(., "lemurida", "lemur")))%>% 
+    mutate_all(~(str_replace(., "lemuriform", "lemur")))%>% 
+    mutate_all(na_if,"…")%>%
+    mutate_all(na_if,"")%>%
+    filter(!is.na(words)) %>%
+    group_by(words, Year) %>%
+    summarize(n = n())%>% 
+    mutate(csum = cumsum(n))%>% 
+    arrange(desc(csum)) %>%
+    ungroup()%>%
+    filter(csum >=10) %>%
+    filter(str_detect(words, "propithec|\\blemur|coquerl|primat|specie|sifaka|verreauxi|madagascar|stud|forest|catta|populat|captiv|group|evolu")) 
+
+ggplot(data=topwords, aes(x=as.numeric(Year), y=csum, group=words)) +
+  geom_line(position="dodge") +  geom_vline(xintercept=2005,lwd=1,colour="blue")+
+  scale_shape_manual(values = 1:15) +
+  scale_x_continuous(breaks = seq(1960, 2022, by = 10)) +
+  scale_y_continuous() + 
+  geom_text(
+    data = topwords %>%
+      arrange(desc(Year)) %>%
+      group_by(words) %>%
+      slice_max(csum,n=1),
+    aes(label = csum),
+    position = position_dodge(width = 1),
+    hjust = 1.5,
+    vjust = 1,
+    show.legend = FALSE,
+    inherit.aes = TRUE
+  ) +
+  labs(
+    y = "Cumulative Count",
+    variable = "Keywords",
+    colour = "Search Term:",
+    title = "Keywords Usage Evolution Over Time"
+  ) +
+  facet_wrap(~ reorder(words, -csum), ncol = 4, scales = "free", as.table=FALSE) +
+  theme(
+    panel.border = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    plot.title = element_text(face = "bold", size = 12),
+    text = element_text(size = 10),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(colour = NA),
+    axis.text = element_text(size = 10),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_line(colour = "#f0f0f0"),
+    panel.grid.minor = element_blank(),
+    axis.ticks = element_line(colour = "black"),
+    plot.margin = unit(c(5, 5, 5, 5), "mm"),
+    strip.background = element_rect(colour = "#f0f0f0", fill = "#f0f0f0"),
+    legend.position = "top",
+    legend.justification = "right",
+    legend.box.margin = margin(c(-27.5, 5, 5, 5)),
+    legend.text =  element_text(size = 10),
+    strip.text = element_text(face = "bold")
+  )
+
+
+```
